@@ -14,7 +14,7 @@ export function validateLeadCreate(payload) {
 
   if (!phone) errors.phone = 'Phone number is required.';
   if (phone && !/^\d+$/.test(phone)) errors.phone = 'Phone number must contain digits only.';
-  if (phone.length > 15) errors.phone = 'Phone number must be 15 digits or fewer.';
+  if (phone.length > 20) errors.phone = 'Phone number must be 20 digits or fewer.';
 
   if (!source) errors.source = 'Source is required.';
   if (source && !LEAD_SOURCES.includes(source)) errors.source = 'Source is invalid.';
@@ -53,4 +53,24 @@ export function parseLeadFilters(query) {
     status: LEAD_STATUSES.includes(status) ? status : '',
     source: LEAD_SOURCES.includes(source) ? source : '',
   };
+}
+
+export function validateCreateLeadRequest(req, res, next) {
+  const result = validateLeadCreate(req.body || {});
+  if (!result.valid) {
+    return res.status(422).json({ message: 'Please fix the highlighted fields.', errors: result.errors });
+  }
+
+  req.validatedLead = result.value;
+  next();
+}
+
+export function validateStatusUpdateRequest(req, res, next) {
+  const result = validateLeadStatus(req.body || {});
+  if (!result.valid) {
+    return res.status(422).json({ message: 'Please choose a valid status.', errors: result.errors });
+  }
+
+  req.validatedStatus = result.value.status;
+  next();
 }

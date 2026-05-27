@@ -3,9 +3,7 @@ import { LEAD_STATUSES } from './constants.js';
 
 const { Pool } = pg;
 
-const hasPostgresConfig =
-  Boolean(process.env.DATABASE_URL) ||
-  Boolean(process.env.PGHOST && process.env.PGDATABASE && process.env.PGUSER);
+const hasPostgresConfig = Boolean(process.env.DATABASE_URL);
 
 export const pool = hasPostgresConfig
   ? new Pool({
@@ -21,12 +19,14 @@ export async function initDatabase() {
     CREATE TABLE IF NOT EXISTS leads (
       id SERIAL PRIMARY KEY,
       name VARCHAR(100) NOT NULL,
-      phone VARCHAR(15) NOT NULL,
+      phone VARCHAR(20) NOT NULL,
       source VARCHAR(20) NOT NULL,
       status VARCHAR(30) DEFAULT 'Interested',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  await pool.query('ALTER TABLE leads ALTER COLUMN phone TYPE VARCHAR(20)');
 
   return true;
 }
