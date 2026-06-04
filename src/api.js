@@ -7,7 +7,7 @@ export const api = axios.create({
 
 export async function getLeads(filters) {
   const { data } = await api.get('/leads', { params: filters });
-  return data.leads;
+  return data;
 }
 
 export async function createLead(payload) {
@@ -15,8 +15,13 @@ export async function createLead(payload) {
   return data.lead;
 }
 
+export async function updateLead(id, payload) {
+  const { data } = await api.put(`/leads/${id}`, payload);
+  return data.lead;
+}
+
 export async function updateLeadStatus(id, status) {
-  const { data } = await api.put(`/leads/${id}`, { status });
+  const { data } = await api.patch(`/leads/${id}/status`, { status });
   return data.lead;
 }
 

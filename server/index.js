@@ -3,8 +3,8 @@ import express from 'express';
 import cors from 'cors';
 import { initDatabase, pgStore } from './db.js';
 import { fileStore } from './fileStore.js';
-import { parseLeadFilters, validateCreateLeadRequest, validateStatusUpdateRequest } from './validation.js';
-import { LEAD_SOURCES, LEAD_STATUSES } from './constants.js';
+import { parseLeadQuery, validateLeadRequest, validateStatusRequest } from './validation.js';
+import { LEAD_STATUSES } from './constants.js';
 
 const app = express();
 const port = Number(process.env.PORT || 5000);
@@ -24,21 +24,20 @@ router.get('/health', (_req, res) => {
   res.json({
     ok: true,
     database: storageMode,
-    sources: LEAD_SOURCES,
     statuses: LEAD_STATUSES,
   });
 });
 
 router.get('/leads', async (req, res, next) => {
   try {
-    const leads = await store.listLeads(parseLeadFilters(req.query));
-    res.json({ leads });
+    const result = await store.listLeads(parseLeadQuery(req.query));
+    res.json(result);
   } catch (error) {
     next(error);
   }
 });
 
-router.post('/leads', validateCreateLeadRequest, async (req, res, next) => {
+router.post('/leads', validateLeadRequest, async (req, res, next) => {
   try {
     const lead = await store.createLead(req.validatedLead);
     res.status(201).json({ lead });
@@ -47,7 +46,23 @@ router.post('/leads', validateCreateLeadRequest, async (req, res, next) => {
   }
 });
 
-router.put('/leads/:id', validateStatusUpdateRequest, async (req, res, next) => {
+router.put('/leads/:id', validateLeadRequest, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ message: 'Invalid lead id.' });
+    }
+
+    const lead = await store.updateLead(id, req.validatedLead);
+    if (!lead) return res.status(404).json({ message: 'Lead not found.' });
+
+    res.json({ lead });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/leads/:id/status', validateStatusRequest, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {

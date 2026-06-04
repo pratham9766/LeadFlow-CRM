@@ -1,25 +1,27 @@
 # LeadFlow CRM
 
-LeadFlow CRM is a production-ready mini CRM for capturing, searching, filtering, and managing sales leads. It uses a React/Vite dashboard, an Express REST API, PostgreSQL for production data, and an automatic JSON-file fallback for local development when `DATABASE_URL` is not configured.
+LeadFlow CRM is a production-ready lead management dashboard for small businesses. It helps teams capture customer leads, track pipeline status, search and filter records, edit details, and monitor lead statistics from a clean responsive React interface.
 
 ## Features
 
-- Lead CRUD: create, fetch, update status, and delete leads.
-- Lead fields: `id`, `name`, `phone`, `source`, `status`, `created_at`.
-- Allowed sources: `Call`, `WhatsApp`, `Field`.
-- Allowed statuses: `Interested`, `Not Interested`, `Converted`.
-- Dashboard metrics for total, interested, converted, and not interested leads.
-- Search by name or phone.
-- Filter by source and status.
-- Responsive desktop and mobile dashboard.
-- Loading states, empty state UI, form validation, toast notifications, hover transitions, and subtle animations.
+- Add new leads and customers.
+- View all leads in a dashboard table.
+- Edit full lead details.
+- Update only lead status from the table.
+- Delete leads with confirmation.
+- Search by name, email, or company.
+- Filter by status.
+- Sort by created date, name, or status.
+- Paginate lead results.
+- Dashboard statistics for total, new, contacted, qualified, converted, and lost leads.
+- Loading states, empty states, toast notifications, form validation, subtle animations, and mobile-friendly layout.
 - PostgreSQL storage with parameterized SQL queries.
-- Local JSON fallback at `server/data/leads.json` when `DATABASE_URL` is missing.
+- JSON fallback storage at `server/data/leads.json` when `DATABASE_URL` is not configured.
 
 ## Tech Stack
 
 Frontend:
-- React
+- React.js
 - Vite
 - Tailwind CSS
 - Axios
@@ -34,6 +36,27 @@ Backend:
 Database:
 - PostgreSQL
 - Local JSON fallback
+
+## Lead Fields
+
+Each lead contains:
+
+- `id`
+- `name`
+- `email`
+- `phone`
+- `company`
+- `status`
+- `notes`
+- `created_at`
+
+Allowed statuses:
+
+- `New`
+- `Contacted`
+- `Qualified`
+- `Converted`
+- `Lost`
 
 ## Project Structure
 
@@ -66,7 +89,7 @@ Install dependencies:
 npm install
 ```
 
-Create your environment file:
+Create an environment file:
 
 ```bash
 cp .env.example .env
@@ -101,50 +124,74 @@ DATABASE_URL=postgres://postgres:postgres@localhost:5432/leadflow_crm
 
 Variable notes:
 - `PORT`: Express server port.
-- `FRONTEND_URL`: Allowed CORS origin for the frontend.
-- `VITE_API_URL`: Frontend API base URL. Use `/api` locally with the Vite proxy, or your deployed backend URL plus `/api`.
-- `DATABASE_URL`: PostgreSQL connection string. If missing, the app automatically uses `server/data/leads.json`.
+- `FRONTEND_URL`: Allowed frontend origin for CORS.
+- `VITE_API_URL`: Frontend API base URL. Use `/api` locally with the Vite proxy or a deployed backend URL ending in `/api`.
+- `DATABASE_URL`: PostgreSQL connection string. If missing or unavailable during startup, the backend uses JSON fallback storage.
 
 ## Database Schema
 
-The server creates the table automatically when `DATABASE_URL` is configured:
+The server creates and upgrades the table automatically when PostgreSQL is configured:
 
 ```sql
-CREATE TABLE leads (
+CREATE TABLE IF NOT EXISTS leads (
   id SERIAL PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
+  email VARCHAR(150) NOT NULL,
   phone VARCHAR(20) NOT NULL,
-  source VARCHAR(20) NOT NULL,
-  status VARCHAR(30) DEFAULT 'Interested',
+  company VARCHAR(150) NOT NULL,
+  status VARCHAR(30) DEFAULT 'New',
+  notes TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
 ## API Routes
 
-Primary backend routes:
+Primary routes:
 
 | Method | Route | Description |
 | --- | --- | --- |
-| `GET` | `/leads` | Fetch leads. Supports `search`, `source`, and `status` query params. |
-| `POST` | `/leads` | Create a new lead. |
-| `PUT` | `/leads/:id` | Update lead status. |
+| `POST` | `/leads` | Create a lead. |
+| `GET` | `/leads` | Get leads with search, filter, sort, and pagination. |
+| `PUT` | `/leads/:id` | Update full lead details. |
+| `PATCH` | `/leads/:id/status` | Update only lead status. |
 | `DELETE` | `/leads/:id` | Delete a lead. |
-| `GET` | `/leads/stats` | Fetch dashboard metrics. |
-| `GET` | `/health` | Health check and enum metadata. |
+| `GET` | `/leads/stats` | Get dashboard statistics. |
+| `GET` | `/health` | Health check and status metadata. |
 
-The same routes are also available under `/api`, for example `/api/leads`, which is what the frontend uses by default.
+The same routes are also available under `/api`, for example `/api/leads`.
+
+## Query Parameters
+
+`GET /leads` supports:
+
+| Parameter | Values |
+| --- | --- |
+| `search` | Name, email, or company text |
+| `status` | `New`, `Contacted`, `Qualified`, `Converted`, `Lost` |
+| `sortBy` | `created_at`, `name`, `status` |
+| `sortOrder` | `asc`, `desc` |
+| `page` | Positive number |
+| `limit` | `1` to `50` |
+
+Example:
+
+```text
+/leads?search=acme&status=Qualified&sortBy=name&sortOrder=asc&page=1&limit=10
+```
 
 ## Request Examples
 
-Create lead:
+Create or update lead:
 
 ```json
 {
-  "name": "Rahul Sharma",
+  "name": "Aarav Mehta",
+  "email": "aarav@northstar.com",
   "phone": "9876543210",
-  "source": "WhatsApp",
-  "status": "Interested"
+  "company": "Northstar Retail",
+  "status": "New",
+  "notes": "Interested in a demo next week."
 }
 ```
 
@@ -152,7 +199,7 @@ Update status:
 
 ```json
 {
-  "status": "Converted"
+  "status": "Qualified"
 }
 ```
 
@@ -170,7 +217,7 @@ Run production build:
 npm run build
 ```
 
-Start production server:
+Start backend:
 
 ```bash
 npm start
@@ -178,37 +225,35 @@ npm start
 
 ## Deployment
 
-### Frontend on Vercel
+### Vercel Frontend
 
-1. Import the repository in Vercel.
-2. Set the build command:
+Build command:
 
 ```bash
 npm run build
 ```
 
-3. Set the output directory:
+Output directory:
 
 ```text
 dist
 ```
 
-4. Add frontend environment variable:
+Environment variable:
 
 ```env
 VITE_API_URL=https://your-render-backend.onrender.com/api
 ```
 
-### Backend on Render
+### Render Backend
 
-1. Create a new Web Service.
-2. Set the start command:
+Start command:
 
 ```bash
 npm start
 ```
 
-3. Add backend environment variables:
+Environment variables:
 
 ```env
 PORT=10000
@@ -216,14 +261,12 @@ FRONTEND_URL=https://your-vercel-app.vercel.app
 DATABASE_URL=your-postgresql-connection-string
 ```
 
-Render provides the runtime port through `PORT`; keep that variable enabled.
-
 ### PostgreSQL
 
-Use any hosted PostgreSQL provider such as Neon, Supabase, Render PostgreSQL, or Railway. Add the provider connection string as `DATABASE_URL`.
+Use any hosted PostgreSQL provider such as Neon, Supabase, Render PostgreSQL, Railway, or another managed PostgreSQL service. Add its connection string as `DATABASE_URL`.
 
 ## Storage Behavior
 
-- With `DATABASE_URL`: data is stored in PostgreSQL.
-- Without `DATABASE_URL`: data is stored in `server/data/leads.json`.
-- The frontend API contract stays identical in both modes.
+- With a working `DATABASE_URL`: data is stored in PostgreSQL.
+- Without `DATABASE_URL`, or if PostgreSQL cannot initialize: data is stored in `server/data/leads.json`.
+- The frontend API contract remains the same in both modes.

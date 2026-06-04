@@ -17,10 +17,28 @@ async function ensureStore() {
   }
 }
 
+function normalizeLead(lead) {
+  const statusMap = {
+    Interested: 'New',
+    'Not Interested': 'Lost',
+  };
+
+  return {
+    id: lead.id,
+    name: lead.name || '',
+    email: lead.email || '',
+    phone: lead.phone || '',
+    company: lead.company || '',
+    status: LEAD_STATUSES.includes(lead.status) ? lead.status : statusMap[lead.status] || 'New',
+    notes: lead.notes || '',
+    created_at: lead.created_at || new Date().toISOString(),
+  };
+}
+
 async function readLeads() {
   await ensureStore();
   const raw = await readFile(DATA_FILE, 'utf8');
-  return JSON.parse(raw);
+  return JSON.parse(raw).map(normalizeLead);
 }
 
 async function writeLeads(leads) {
@@ -29,20 +47,46 @@ async function writeLeads(leads) {
 }
 
 function applyFilters(leads, filters) {
+  const search = filters.search.toLowerCase();
   return leads.filter((lead) => {
-    const matchesSearch = filters.search
-      ? lead.name.toLowerCase().includes(filters.search.toLowerCase()) || lead.phone.includes(filters.search)
+    const matchesSearch = search
+      ? lead.name.toLowerCase().includes(search) ||
+        lead.email.toLowerCase().includes(search) ||
+        lead.company.toLowerCase().includes(search)
       : true;
     const matchesStatus = filters.status ? lead.status === filters.status : true;
-    const matchesSource = filters.source ? lead.source === filters.source : true;
-    return matchesSearch && matchesStatus && matchesSource;
+    return matchesSearch && matchesStatus;
   });
+}
+
+function sortLeads(leads, filters) {
+  const direction = filters.sortOrder === 'asc' ? 1 : -1;
+  return [...leads].sort((a, b) => {
+    const left = filters.sortBy === 'created_at' ? new Date(a.created_at).getTime() : String(a[filters.sortBy] || '');
+    const right = filters.sortBy === 'created_at' ? new Date(b.created_at).getTime() : String(b[filters.sortBy] || '');
+
+    if (left < right) return -1 * direction;
+    if (left > right) return 1 * direction;
+    return b.id - a.id;
+  });
+}
+
+function paginate(leads, filters) {
+  const total = leads.length;
+  const totalPages = Math.max(Math.ceil(total / filters.limit), 1);
+  const page = Math.min(filters.page, totalPages);
+  const start = (page - 1) * filters.limit;
+
+  return {
+    leads: leads.slice(start, start + filters.limit),
+    pagination: { total, page, limit: filters.limit, totalPages },
+  };
 }
 
 export const fileStore = {
   async listLeads(filters) {
     const leads = await readLeads();
-    return applyFilters(leads, filters).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return paginate(sortLeads(applyFilters(leads, filters), filters), filters);
   },
 
   async createLead(input) {
@@ -56,6 +100,15 @@ export const fileStore = {
     leads.push(lead);
     await writeLeads(leads);
     return lead;
+  },
+
+  async updateLead(id, input) {
+    const leads = await readLeads();
+    const index = leads.findIndex((lead) => lead.id === id);
+    if (index === -1) return null;
+    leads[index] = { ...leads[index], ...input };
+    await writeLeads(leads);
+    return leads[index];
   },
 
   async updateLeadStatus(id, status) {
@@ -77,15 +130,14 @@ export const fileStore = {
 
   async getStats() {
     const leads = await readLeads();
-    const stats = LEAD_STATUSES.reduce((acc, status) => ({ ...acc, [status]: 0 }), {});
+    const byStatus = LEAD_STATUSES.reduce((acc, status) => ({ ...acc, [status]: 0 }), {});
     for (const lead of leads) {
-      stats[lead.status] = (stats[lead.status] || 0) + 1;
+      if (lead.status in byStatus) byStatus[lead.status] += 1;
     }
+
     return {
-      total: leads.length,
-      interested: stats.Interested,
-      converted: stats.Converted,
-      notInterested: stats['Not Interested'],
+      total: Object.values(byStatus).reduce((sum, count) => sum + count, 0),
+      byStatus,
     };
   },
 };
